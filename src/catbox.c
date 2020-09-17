@@ -7,6 +7,8 @@
  *    - No re-licensing this work under more restrictive terms        *
  *    - Redistributing? Include/offer to deliver original source      *
  *   Philosophy/full details at http://www.gnu.org/copyleft/gpl.html  *
+ *
+ *   Bitmap images (c) 1990 Masayuki Koba according to txneko
  */
 
 #include <stdio.h>
@@ -15,10 +17,24 @@
 #include <unistd.h>
 #include <X11/Xlib.h>
 
-#define WIN_WIDTH	100
-#define WIN_HEIGHT	50
+/* 'bitmaps' tree includes "dog", "neko" (cat), "sakura", "tomoyo", "tora" */
+/* bitmaps include
+ *  awake   - alarmed (...movement follows)
+ *  {down|up}<n>, dw{left|right}<n>, {left|right}<n>, up{left|right}<n> - moving
+ *  dtogi<n>, ltogi<n>, rtogi<n>, utogi<n> - pawing
+ *  jare2 - washing
+ *  kaki<n> - scratching
+ *  mati2 - sitting
+ *  mati3 - yawning
+ *  sleep<n>
+ */
+/* see also "bitmaps/neko/include" */
+#include "bitmaps/neko/awake.xbm"	/* awake_{width,height,bits} */
+
 #define DEFAULT_DISPLAY ":0"
 
+#define BITMAP_HEIGHT	awake_height
+#define BITMAP_WIDTH	awake_width
 
 struct {
     const char  *progname;
@@ -43,7 +59,7 @@ static int gui_init(void)
 
 	config.mainwin= XCreateSimpleWindow(config.xdpy, config.xroot,
 			10, 10,                     /* x,y */
-			WIN_WIDTH, WIN_HEIGHT,	/* w,h */
+			BITMAP_WIDTH, BITMAP_HEIGHT,        /* w,h */
 			1, BlackPixel(config.xdpy, config.xscr),  /* window's border */
 			WhitePixel(config.xdpy, config.xscr));    /* window's background */
     if (!config.mainwin)
@@ -68,6 +84,35 @@ static int gui_init(void)
     return EXIT_SUCCESS;
 }
 
+static void draw()
+{
+    Pixmap      anim_xbm;
+    GC          anim_GC;
+    XGCValues   anim_GCValues;
+
+	anim_xbm= XCreateBitmapFromData(config.xdpy, config.xroot,
+		awake_bits, BITMAP_WIDTH, BITMAP_HEIGHT
+        );
+
+	anim_GCValues.function= GXcopy;
+	anim_GCValues.fill_style = FillTiled;
+	anim_GCValues.ts_x_origin = 0;
+	anim_GCValues.ts_y_origin = 0;
+	anim_GCValues.tile= anim_xbm;
+
+    anim_GC= XCreateGC(config.xdpy, config.xroot, 0, &anim_GCValues);
+    XSetForeground(config.xdpy, anim_GC, BlackPixel(config.xdpy, config.xscr));
+    XSetBackground(config.xdpy, anim_GC, WhitePixel(config.xdpy, config.xscr));
+
+    XCopyPlane(config.xdpy, anim_xbm, config.mainwin, anim_GC,
+            0,0, BITMAP_WIDTH, BITMAP_HEIGHT,   /* source region */
+            0,0, 1                              /* dest region/plane */
+            );
+    XSync(config.xdpy, False);
+
+	XFlush(config.xdpy);
+}
+
 static int gui_fini(void)
 {
 	XDestroyWindow(config.xdpy, config.mainwin);
@@ -85,6 +130,7 @@ int main(const int argc, const char **argv)
         return EXIT_FAILURE;
     }
 
+    draw();
     sleep(5);
 
     return gui_fini();
