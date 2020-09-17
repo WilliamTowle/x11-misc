@@ -20,10 +20,13 @@
 #define DEFAULT_DISPLAY ":0"
 
 
-Display *xdpy;
-int xscr;
-Window xroot;
-Window mainwin;
+struct {
+    const char  *progname;
+    Display     *xdpy;
+    int         xscr;
+    Window      xroot;
+    Window      mainwin;
+} config;
 
 
 static int gui_init(void)
@@ -33,49 +36,52 @@ static int gui_init(void)
     if (dispname == NULL)
         dispname= DEFAULT_DISPLAY;
 
-	xdpy= XOpenDisplay(dispname);
+	config.xdpy= XOpenDisplay(dispname);
 
-	xscr= DefaultScreen(xdpy);
-	xroot= RootWindow(xdpy, xscr);
+    config.xscr= DefaultScreen(config.xdpy);
+	config.xroot= RootWindow(config.xdpy, config.xscr);
 
-	mainwin= XCreateSimpleWindow(xdpy, xroot,
+	config.mainwin= XCreateSimpleWindow(config.xdpy, config.xroot,
 			10, 10,                     /* x,y */
 			WIN_WIDTH, WIN_HEIGHT,	/* w,h */
-			1, BlackPixel(xdpy, xscr),  /* window's border */
-			WhitePixel(xdpy, xscr));    /* window's background */
-    if (!mainwin)
+			1, BlackPixel(config.xdpy, config.xscr),  /* window's border */
+			WhitePixel(config.xdpy, config.xscr));    /* window's background */
+    if (!config.mainwin)
         return EXIT_FAILURE;
 
     /* register for our MapNotify event */
-	XSelectInput(xdpy, mainwin, StructureNotifyMask);
+	XSelectInput(config.xdpy, config.mainwin, StructureNotifyMask);
 
-	XMapWindow(xdpy, mainwin);
+	XMapWindow(config.xdpy, config.mainwin);
 
     /* await our MapNotify event */
     while (1)
     {
         XEvent xe;
-        XNextEvent(xdpy, &xe);
+        XNextEvent(config.xdpy, &xe);
         if (xe.type == MapNotify)
             break;
     }
 
-        XClearWindow(xdpy, mainwin);
+    XClearWindow(config.xdpy, config.mainwin);
 
     return EXIT_SUCCESS;
 }
 
 static int gui_fini(void)
 {
-	XDestroyWindow(xdpy, mainwin);
+	XDestroyWindow(config.xdpy, config.mainwin);
 
-    return XCloseDisplay(xdpy);
+    return XCloseDisplay(config.xdpy);
 }
 
-int main()
+int main(const int argc, const char **argv)
 {
+    config.progname= argv[0];
+
     if (gui_init() != EXIT_SUCCESS)
     {
+        printf("%s: initialisation failed\n", config.progname);
         return EXIT_FAILURE;
     }
 
