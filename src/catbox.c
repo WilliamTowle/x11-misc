@@ -31,7 +31,11 @@
  */
 /* see also "bitmaps/neko/include" */
 #include "bitmaps/neko/awake.xbm"	/* awake_{width,height,bits} */
+#include "bitmaps/neko/sleep1.xbm"
+#include "bitmaps/neko/sleep2.xbm"
 #include "bitmaps/dog/awake_dog.xbm"
+#include "bitmaps/dog/sleep1_dog.xbm"
+#include "bitmaps/dog/sleep2_dog.xbm"
 
 #define DEFAULT_DISPLAY ":0"
 
@@ -52,11 +56,14 @@ struct {
         const char  *name;
         int         width;
         int         height;
-        char        *awake_bits;
+        char        *awake_bits, *sleep1_bits, *sleep2_bits;
 } bitmap_table[] = {
-        { "neko",   awake_width, awake_height, awake_bits },
-        { "dog",    awake_dog_width, awake_dog_height, awake_dog_bits },
-        { NULL,     0,0, NULL }
+        { "neko",   awake_width, awake_height,
+                    awake_bits, sleep1_bits, sleep2_bits },
+        { "dog",    awake_dog_width, awake_dog_height,
+                    awake_dog_bits, sleep1_dog_bits, sleep2_dog_bits },
+        { NULL,     0,0,
+                    NULL, NULL, NULL }
 };
 
 
@@ -99,15 +106,17 @@ static int gui_init(void)
     return EXIT_SUCCESS;
 }
 
-static void draw()
+static void draw(int patnum)
 {
-    char        *anim_bits= bitmap_table[config.character].awake_bits;
+    char        *anim_bits[]= {  bitmap_table[config.character].awake_bits,
+                            bitmap_table[config.character].sleep1_bits,
+                            bitmap_table[config.character].sleep2_bits };
     Pixmap      anim_xbm;
     GC          anim_GC;
     XGCValues   anim_GCValues;
 
 	anim_xbm= XCreateBitmapFromData(config.xdpy, config.xroot,
-		anim_bits, BITMAP_WIDTH, BITMAP_HEIGHT
+		anim_bits[patnum], BITMAP_WIDTH, BITMAP_HEIGHT
         );
 
 	anim_GCValues.function= GXcopy;
@@ -134,6 +143,18 @@ static int gui_fini(void)
 	XDestroyWindow(config.xdpy, config.mainwin);
 
     return XCloseDisplay(config.xdpy);
+}
+
+static void run_animation()
+{
+    int state= 0;
+
+    while (state < 3)
+    {
+        draw(state);
+        sleep(2);
+        state++;
+    }
 }
 
 int main(const int argc, const char **argv)
@@ -168,8 +189,7 @@ int main(const int argc, const char **argv)
         }
     }
 
-    draw();
-    sleep(5);
+    run_animation();
 
     return gui_fini();
 }
