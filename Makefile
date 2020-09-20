@@ -1,5 +1,6 @@
 #!/usr/bin/make
 
+HAVE_CATBOX=y
 HAVE_XTEST=y
 
 CC=/usr/bin/gcc
@@ -28,6 +29,13 @@ endif	# MAKE_MAKE_STRICT
 
 
 ALL_EXES=
+
+ifeq (${HAVE_CATBOX},y)
+ALL_EXES+= catbox
+CFLAGS_CATBOX= ${CFLAGS}
+LIBS_CATBOX=-lX11
+endif
+
 ifeq (${HAVE_XTEST},y)
 ALL_EXES+= xtest
 CFLAGS_XTEST= ${CFLAGS}
@@ -43,6 +51,12 @@ default: all
 all: ${ALL_EXES}
 
 ##
+
+ifeq (${HAVE_CATBOX},y)
+catbox: src/catbox.c
+	${CC} ${CFLAGS_CATBOX} $< -o $@ ${LIBS_CATBOX}
+endif
+
 
 ifeq (${HAVE_XTEST},y)
 xtest: src/xtest.c
