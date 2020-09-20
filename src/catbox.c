@@ -14,6 +14,7 @@
 #include <stdio.h>
 
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <X11/Xlib.h>
 
@@ -30,19 +31,33 @@
  */
 /* see also "bitmaps/neko/include" */
 #include "bitmaps/neko/awake.xbm"	/* awake_{width,height,bits} */
+#include "bitmaps/dog/awake_dog.xbm"
 
 #define DEFAULT_DISPLAY ":0"
 
-#define BITMAP_HEIGHT	awake_height
-#define BITMAP_WIDTH	awake_width
+#define BITMAP_HEIGHT	bitmap_table[config.character].height
+#define BITMAP_WIDTH	bitmap_table[config.character].width
 
 struct {
-    const char  *progname;
-    Display     *xdpy;
-    int         xscr;
-    Window      xroot;
-    Window      mainwin;
+    const char      *progname;
+    Display         *xdpy;
+    int             xscr;
+    Window          xroot;
+
+    Window          mainwin;
+    unsigned int    character;
 } config;
+
+struct {
+        const char  *name;
+        int         width;
+        int         height;
+        char        *awake_bits;
+} bitmap_table[] = {
+        { "neko",   awake_width, awake_height, awake_bits },
+        { "dog",    awake_dog_width, awake_dog_height, awake_dog_bits },
+        { NULL,     0,0, NULL }
+};
 
 
 static int gui_init(void)
@@ -86,12 +101,13 @@ static int gui_init(void)
 
 static void draw()
 {
+    char        *anim_bits= bitmap_table[config.character].awake_bits;
     Pixmap      anim_xbm;
     GC          anim_GC;
     XGCValues   anim_GCValues;
 
 	anim_xbm= XCreateBitmapFromData(config.xdpy, config.xroot,
-		awake_bits, BITMAP_WIDTH, BITMAP_HEIGHT
+		anim_bits, BITMAP_WIDTH, BITMAP_HEIGHT
         );
 
 	anim_GCValues.function= GXcopy;
@@ -122,12 +138,34 @@ static int gui_fini(void)
 
 int main(const int argc, const char **argv)
 {
+    int ix;
+
     config.progname= argv[0];
 
     if (gui_init() != EXIT_SUCCESS)
     {
         printf("%s: initialisation failed\n", config.progname);
         return EXIT_FAILURE;
+    }
+
+    if (argc > 1)
+    {
+        int found= 0;
+
+        for (ix= 0; bitmap_table[ix].name != NULL; ix++)
+        {
+            if (strcmp(argv[1], bitmap_table[ix].name) == 0)
+            {
+                config.character= ix;
+                found= 1;
+            }
+        }
+        if (!found)
+        {
+            fprintf(stderr, "%s: Character bitmap '%s' not found\n",
+                    config.progname, argv[1]);
+            exit(EXIT_FAILURE);
+        }
     }
 
     draw();
