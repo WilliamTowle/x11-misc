@@ -31,9 +31,13 @@
  */
 /* see also "bitmaps/neko/include" */
 #include "bitmaps/neko/awake.xbm"	/* awake_{width,height,bits} */
+#include "bitmaps/neko/jare2.xbm"
+#include "bitmaps/neko/mati2.xbm"
 #include "bitmaps/neko/sleep1.xbm"
 #include "bitmaps/neko/sleep2.xbm"
 #include "bitmaps/dog/awake_dog.xbm"
+#include "bitmaps/dog/jare2_dog.xbm"
+#include "bitmaps/dog/mati2_dog.xbm"
 #include "bitmaps/dog/sleep1_dog.xbm"
 #include "bitmaps/dog/sleep2_dog.xbm"
 
@@ -56,16 +60,28 @@ struct {
         const char  *name;
         int         width;
         int         height;
-        char        *awake_bits, *sleep1_bits, *sleep2_bits;
+        char        *awake_bits,
+                    *mati_bits, *jare_bits,
+                    *sleep1_bits, *sleep2_bits;
 } bitmap_table[] = {
         { "neko",   awake_width, awake_height,
-                    awake_bits, sleep1_bits, sleep2_bits },
+                    awake_bits,
+                    mati2_bits, jare2_bits,
+                    sleep1_bits, sleep2_bits },
         { "dog",    awake_dog_width, awake_dog_height,
-                    awake_dog_bits, sleep1_dog_bits, sleep2_dog_bits },
+                    awake_bits,
+                    mati2_dog_bits, jare2_dog_bits,
+                    sleep1_dog_bits, sleep2_dog_bits },
         { NULL,     0,0,
-                    NULL, NULL, NULL }
+                    NULL, NULL, NULL, NULL, NULL }
 };
 
+typedef enum {
+    ANIM_STOP,      /* sitting - frame[s]: mati2 (sitting) */
+    ANIM_JARE,      /* resting - frame[s]: jare2 (scratching/washing) */
+    ANIM_SLEEP,     /* asleep - frame[s]: sleep1/sleep2 (snoring) */
+    ANIM_STATE_LAST
+} anim_state_t;
 
 static int gui_init(void)
 {
@@ -108,12 +124,17 @@ static int gui_init(void)
 
 static void draw(int patnum)
 {
-    char        *anim_bits[]= {  bitmap_table[config.character].awake_bits,
-                            bitmap_table[config.character].sleep1_bits,
-                            bitmap_table[config.character].sleep2_bits };
+    char        *anim_bits[]= { bitmap_table[config.character].awake_bits,
+                                bitmap_table[config.character].mati_bits,
+                                bitmap_table[config.character].jare_bits,
+                                bitmap_table[config.character].sleep1_bits,
+                                bitmap_table[config.character].sleep2_bits };
     Pixmap      anim_xbm;
     GC          anim_GC;
     XGCValues   anim_GCValues;
+
+    if (patnum >= 5)
+        patnum= 0;  /* force "awake" if out of range */
 
 	anim_xbm= XCreateBitmapFromData(config.xdpy, config.xroot,
 		anim_bits[patnum], BITMAP_WIDTH, BITMAP_HEIGHT
@@ -147,14 +168,44 @@ static int gui_fini(void)
 
 static void run_animation()
 {
-    int state= 0;
+    anim_state_t anim_state= ANIM_STOP;
 
-    while (state < 3)
+    do
     {
-        draw(state);
-        sleep(2);
-        state++;
+        switch(anim_state)
+        {
+        case ANIM_STOP:
+            /* oneko:
+             * switches immediately to "awake" state if moving;
+             * maintains current animation briefly otherwise
+             * on timeout, moves to pawing (togi) or rests (jare)
+             */
+            draw(1);
+            sleep(2);
+            anim_state= ANIM_JARE;
+            break;
+        case ANIM_JARE:
+            /* oneko:
+             * switches immediately to "awake" state if moving
+             * maintains animation briefly otherwise
+             * moves to "kaki" state
+             */
+            draw(2);
+            sleep(2);
+            anim_state= ANIM_SLEEP;
+            break;
+        case ANIM_SLEEP:
+            draw(3);
+            sleep(1);
+            draw(4);
+            sleep(1);
+            anim_state= ANIM_STATE_LAST;
+            break;
+        default:
+            anim_state= ANIM_STOP;
+        }
     }
+    while (anim_state != ANIM_STATE_LAST);
 }
 
 int main(const int argc, const char **argv)
