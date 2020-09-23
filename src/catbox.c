@@ -13,9 +13,11 @@
 
 #include <stdio.h>
 
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <X11/Xlib.h>
 
 /* 'bitmaps' tree includes "dog", "neko" (cat), "sakura", "tomoyo", "tora" */
@@ -46,6 +48,8 @@
 #define BITMAP_HEIGHT	bitmap_table[config.character].height
 #define BITMAP_WIDTH	bitmap_table[config.character].width
 
+#define MAX_TICK        1000
+
 struct {
     const char      *progname;
     Display         *xdpy;
@@ -54,25 +58,28 @@ struct {
 
     Window          mainwin;
     unsigned int    character;
+    int             anim_tick_count;
+    int             anim_state_count;
 } config;
 
 struct {
         const char  *name;
         int         width;
         int         height;
+        long        time;
         char        *awake_bits,
                     *mati_bits, *jare_bits,
                     *sleep1_bits, *sleep2_bits;
 } bitmap_table[] = {
-        { "neko",   awake_width, awake_height,
+        { "neko",   awake_width, awake_height, 125000L,
                     awake_bits,
                     mati2_bits, jare2_bits,
                     sleep1_bits, sleep2_bits },
-        { "dog",    awake_dog_width, awake_dog_height,
+        { "dog",    awake_dog_width, awake_dog_height, 125000L,
                     awake_bits,
                     mati2_dog_bits, jare2_dog_bits,
                     sleep1_dog_bits, sleep2_dog_bits },
-        { NULL,     0,0,
+        { NULL,     0,0, 0L,
                     NULL, NULL, NULL, NULL, NULL }
 };
 
@@ -166,13 +173,30 @@ static int gui_fini(void)
     return XCloseDisplay(config.xdpy);
 }
 
+static void sighandler_alrm()   /* passed int, ignored */
+{
+    if (++config.anim_tick_count >= MAX_TICK)
+        config.anim_tick_count= 0;
+
+    if (config.anim_tick_count % 2 == 0)
+        if (config.anim_state_count < MAX_TICK)
+            config.anim_state_count++;
+}
+
 static void run_animation()
 {
-    anim_state_t anim_state= ANIM_STOP;
+    anim_state_t        curr_anim_state, old_anim_state;
+    long                interval_time= bitmap_table[config.character].time;
+    struct itimerval	itimerval;
+
+    curr_anim_state= ANIM_STOP;
+    config.anim_tick_count= 0;
+    config.anim_state_count= 0;
 
     do
     {
-        switch(anim_state)
+        old_anim_state= curr_anim_state;
+        switch (curr_anim_state)
         {
         case ANIM_STOP:
             /* oneko:
@@ -180,9 +204,10 @@ static void run_animation()
              * maintains current animation briefly otherwise
              * on timeout, moves to pawing (togi) or rests (jare)
              */
-            draw(1);
-            sleep(2);
-            anim_state= ANIM_JARE;
+            if (config.anim_state_count > 16)   /* ~2 secs */
+                curr_anim_state= ANIM_JARE;
+            else
+                draw(1);
             break;
         case ANIM_JARE:
             /* oneko:
@@ -190,22 +215,47 @@ static void run_animation()
              * maintains animation briefly otherwise
              * moves to "kaki" state
              */
-            draw(2);
-            sleep(2);
-            anim_state= ANIM_SLEEP;
+            if (config.anim_state_count > 16)   /* ~2 secs */
+                curr_anim_state= ANIM_SLEEP;
+            else
+                draw(2);
             break;
         case ANIM_SLEEP:
-            draw(3);
-            sleep(1);
-            draw(4);
-            sleep(1);
-            anim_state= ANIM_STATE_LAST;
+            if (config.anim_state_count > 16)   /* ~2 secs */
+                curr_anim_state= ANIM_STATE_LAST;
+            else if ( config.anim_state_count % 2 == 0)
+                draw(3);
+            else
+                draw(4);
+#if 0   /* avoid ANIM_SLEEP prompting exit */
+            if (config.anim_state_count > 16)   /* ~2 secs */
+                curr_anim_state= ANIM_STATE_LAST;
+#endif
             break;
         default:
-            anim_state= ANIM_STOP;
+            curr_anim_state= ANIM_STOP;
+        }
+
+        if (curr_anim_state != old_anim_state)
+        {
+            config.anim_state_count= 0;
+        }
+        else
+        {
+            /* retain the frame shown until alarm or other signal */
+            timerclear(&itimerval.it_interval);
+            timerclear(&itimerval.it_value);
+
+            itimerval.it_interval.tv_usec= interval_time;
+            itimerval.it_value.tv_usec= interval_time;
+
+            signal(SIGALRM, sighandler_alrm);
+            setitimer(ITIMER_REAL, &itimerval, 0);
+
+            pause();    /* await next signal */
         }
     }
-    while (anim_state != ANIM_STATE_LAST);
+    while (curr_anim_state != ANIM_STATE_LAST);
 }
 
 int main(const int argc, const char **argv)
