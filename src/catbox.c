@@ -110,8 +110,8 @@ static int gui_init(void)
     if (!config.mainwin)
         return EXIT_FAILURE;
 
-    /* register for our MapNotify event */
-	XSelectInput(config.xdpy, config.mainwin, StructureNotifyMask);
+    /* register for initial MapNotify event */
+    XSelectInput(config.xdpy, config.mainwin, StructureNotifyMask);
 
 	XMapWindow(config.xdpy, config.mainwin);
 
@@ -186,16 +186,40 @@ static void sighandler_alrm()   /* passed int, ignored */
 static void run_animation()
 {
     anim_state_t        curr_anim_state, old_anim_state;
+    int                 mouse_in_window, old_mouse_in_window;
     long                interval_time= bitmap_table[config.character].time;
     struct itimerval	itimerval;
 
     curr_anim_state= ANIM_STOP;
+    mouse_in_window= 0;
     config.anim_tick_count= 0;
     config.anim_state_count= 0;
 
+    /* Change events we get queued */
+	XSelectInput(config.xdpy, config.mainwin, FocusChangeMask );
+
     do
     {
+        XEvent  xe;
+
         old_anim_state= curr_anim_state;
+        old_mouse_in_window= mouse_in_window;
+
+        while (XPending(config.xdpy))
+        {
+            XNextEvent(config.xdpy, &xe);
+            switch (xe.type)
+            {
+            case FocusIn:
+                mouse_in_window= 1;
+                break;
+            case FocusOut:
+                mouse_in_window= 0;
+                break;
+            /* TODO: redraw window if requirement implied? */
+            }
+        }
+
         switch (curr_anim_state)
         {
         case ANIM_STOP:
@@ -204,7 +228,10 @@ static void run_animation()
              * maintains current animation briefly otherwise
              * on timeout, moves to pawing (togi) or rests (jare)
              */
-            if (config.anim_state_count > 16)   /* ~2 secs */
+            if (mouse_in_window != old_mouse_in_window)
+                config.anim_state_count= 0;
+            else if ( (config.anim_state_count > 16)   /* ~2 secs */
+                    && !mouse_in_window)
                 curr_anim_state= ANIM_JARE;
             else
                 draw(1);
@@ -215,22 +242,27 @@ static void run_animation()
              * maintains animation briefly otherwise
              * moves to "kaki" state
              */
-            if (config.anim_state_count > 16)   /* ~2 secs */
+            if (mouse_in_window)
+                curr_anim_state= ANIM_STOP;
+            else if (config.anim_state_count > 16)   /* ~2 secs */
                 curr_anim_state= ANIM_SLEEP;
             else
                 draw(2);
             break;
         case ANIM_SLEEP:
-            if (config.anim_state_count > 16)   /* ~2 secs */
+            if (mouse_in_window)
+                curr_anim_state= ANIM_STOP;
+#if 0   /* sleeps indefinitely without this */
+            else if (config.anim_state_count > 16)   /* ~2 secs */
                 curr_anim_state= ANIM_STATE_LAST;
-            else if ( config.anim_state_count % 2 == 0)
+#else
+            else if (config.anim_state_count >= MAX_TICK)
+                config.anim_state_count-= MAX_TICK;
+#endif
+            if ( config.anim_state_count % 2 == 0)
                 draw(3);
             else
                 draw(4);
-#if 0   /* avoid ANIM_SLEEP prompting exit */
-            if (config.anim_state_count > 16)   /* ~2 secs */
-                curr_anim_state= ANIM_STATE_LAST;
-#endif
             break;
         default:
             curr_anim_state= ANIM_STOP;
