@@ -183,6 +183,28 @@ static void sighandler_alrm()   /* passed int, ignored */
             config.anim_state_count++;
 }
 
+static void sighandler_usr(int signum)
+{
+    unsigned int characters;
+    int new_character;
+
+    characters= 0;
+    while (bitmap_table[characters].name != NULL)
+        characters++;
+
+    new_character= config.character + (signed int)((signum == SIGUSR1)?1:-1);
+    if (new_character < 0)
+    {
+        new_character = characters - 1;
+    }
+    else if (new_character >= (int)characters)
+    {
+        new_character= 0;
+    }
+
+    config.character= new_character;
+}
+
 static void run_animation()
 {
     anim_state_t        curr_anim_state, old_anim_state;
@@ -282,6 +304,8 @@ static void run_animation()
             itimerval.it_value.tv_usec= interval_time;
 
             signal(SIGALRM, sighandler_alrm);
+            signal(SIGUSR1, sighandler_usr);
+            signal(SIGUSR2, sighandler_usr);
             setitimer(ITIMER_REAL, &itimerval, 0);
 
             pause();    /* await next signal */
